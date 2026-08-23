@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Générateur de légendes</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: linear-gradient(to bottom, #f8fafc, #f1f5f9);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+    color: #1e293b;
+  }
+  .container { width: 100%; max-width: 560px; }
+  h1 { font-size: 24px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .subtitle { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+  .card {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    padding: 20px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  textarea, select, button {
+    width: 100%;
+    font-family: inherit;
+    font-size: 14px;
+  }
+  textarea {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 12px;
+    resize: none;
+    height: 80px;
+    margin-bottom: 12px;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  label { font-size: 12px; color: #64748b; display: block; margin-bottom: 4px; font-weight: 500; }
+  select {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 8px;
+  }
+  button {
+    background: #0f172a;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.upgrade { background: #7c3aed; }
+  .quota { text-align: center; font-size: 12px; color: #94a3b8; margin-top: 10px; }
+  .locked {
+    background: #f5f3ff;
+    border: 1px solid #ddd6fe;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+  .locked p { margin: 4px 0; font-size: 13px; color: #6d28d9; }
+  .error { color: #ef4444; font-size: 13px; margin-bottom: 10px; }
+  .results { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+  .result-item {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 14px;
+    white-space: pre-wrap;
+  }
+  .copy-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    width: auto;
+    padding: 0;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>✨ Générateur de légendes</h1>
+  <p class="subtitle">Décris ton sujet, choisis la plateforme et le ton — 5 légendes prêtes à poster.</p>
+
+  <div class="card">
+    <textarea id="sujet" placeholder="Ex : lancement d'une crème hydratante bio, édition limitée..."></textarea>
+
+    <div class="row">
+      <div>
+        <label>Plateforme</label>
+        <select id="plateforme">
+          <option value="Instagram">Instagram</option>
+          <option value="TikTok">TikTok</option>
+          <option value="LinkedIn">LinkedIn</option>
+          <option value="X / Twitter">X / Twitter</option>
+        </select>
+      </div>
+      <div>
+        <label>Ton</label>
+        <select id="ton">
+          <option value="fun et décalé">Fun & décalé</option>
+          <option value="professionnel">Professionnel</option>
+          <option value="inspirant">Inspirant</option>
+          <option value="vendeur / promo">Vendeur / Promo</option>
+        </select>
+      </div>
+    </div>
+
+    <p class="error" id="erreur" style="display:none;"></p>
+
+    <div id="zone-action"></div>
+    <p class="quota" id="quota"></p>
+  </div>
+
+  <div class="results" id="resultats"></div>
+</div>
+
+<script>
+  const LIMITE_GRATUITE = 3;
+  let utilisations = parseInt(localStorage.getItem("utilisations") || "0");
+  let premium = localStorage.getItem("premium") === "true";
+
+  const zoneAction = document.getElementById("zone-action");
+  const quotaEl = document.getElementById("quota");
+  const erreurEl = document.getElementById("erreur");
+  const resultatsEl = document.getElementById("resultats");
+
+  function afficherZoneAction() {
+    const limiteAtteinte = !premium && utilisations >= LIMITE_GRATUITE;
+    quotaEl.textContent = premium ? "" : `${utilisations}/${LIMITE_GRATUITE} générations gratuites utilisées`;
+
+    if (limiteAtteinte) {
+      zoneAction.innerHTML = `
+        <div class="locked">
+          <p><strong>Limite gratuite atteinte</strong></p>
+          <p>Passe en illimité pour continuer.</p>
+          <button class="upgrade" id="btn-upgrade" style="margin-top:8px;">⚡ Débloquer l'illimité</button>
+        </div>`;
+      document.getElementById("btn-upgrade").onclick = () => {
+        // TODO: brancher un vrai paiement Stripe ici
+        premium = true;
+        localStorage.setItem("premium", "true");
+        afficherZoneAction();
+      };
+    } else {
+      zoneAction.innerHTML = `<button id="btn-generer">Générer 5 légendes</button>`;
+      document.getElementById("btn-generer").onclick = generer;
+    }
+  }
+
+  async function generer() {
+    const sujet = document.getElementById("sujet").value.trim();
+    const plateforme = document.getElementById("plateforme").value;
+    const ton = document.getElementById("ton").value;
+    erreurEl.style.display = "none";
+    resultatsEl.innerHTML = "";
+
+    if (!sujet) {
+      erreurEl.textContent = "Décris d'abord ton produit, post ou sujet.";
+      erreurEl.style.display = "block";
+      return;
+    }
+
+    const btn = document.getElementById("btn-generer");
+    btn.disabled = true;
+    btn.textContent = "Génération...";
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sujet, plateforme, ton }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur serveur");
+
+      data.legendes.forEach((legende) => {
+        const div = document.createElement("div");
+        div.className = "result-item";
+        div.innerHTML = `<span>${legende}</span><button class="copy-btn">Copier</button>`;
+        div.querySelector(".copy-btn").onclick = () => {
+          navigator.clipboard.writeText(legende);
+          div.querySelector(".copy-btn").textContent = "Copié !";
+          setTimeout(() => (div.querySelector(".copy-btn").textContent = "Copier"), 1200);
+        };
+        resultatsEl.appendChild(div);
+      });
+
+      utilisations++;
+      localStorage.setItem("utilisations", utilisations);
+    } catch (e) {
+      erreurEl.textContent = "Un souci est survenu, réessaie dans un instant.";
+      erreurEl.style.display = "block";
+    } finally {
+      afficherZoneAction();
+    }
+  }
+
+  afficherZoneAction();
+</script>
+</body>
+</html>
