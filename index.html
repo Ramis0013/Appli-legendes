@@ -148,15 +148,49 @@
           <p>Passe en illimité pour continuer.</p>
           <button class="upgrade" id="btn-upgrade" style="margin-top:8px;">⚡ Débloquer l'illimité</button>
         </div>`;
-      document.getElementById("btn-upgrade").onclick = () => {
-        // TODO: brancher un vrai paiement Stripe ici
-        premium = true;
-        localStorage.setItem("premium", "true");
-        afficherZoneAction();
+      document.getElementById("btn-upgrade").onclick = async () => {
+        const btn = document.getElementById("btn-upgrade");
+        btn.disabled = true;
+        btn.textContent = "Redirection vers le paiement...";
+        try {
+          const res = await fetch("/.netlify/functions/create-checkout-session", { method: "POST" });
+          const data = await res.json();
+          if (data.url) {
+            window.location.href = data.url;
+          } else {
+            throw new Error("Pas d'URL de paiement reçue");
+          }
+        } catch (e) {
+          erreurEl.textContent = "Impossible de lancer le paiement, réessaie dans un instant.";
+          erreurEl.style.display = "block";
+          btn.disabled = false;
+          btn.textContent = "⚡ Débloquer l'illimité";
+        }
       };
     } else {
       zoneAction.innerHTML = `<button id="btn-generer">Générer 5 légendes</button>`;
       document.getElementById("btn-generer").onclick = generer;
+    }
+  }
+
+  async function verifierRetourPaiement() {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+    if (!sessionId) return;
+
+    try {
+      const res = await fetch(`/.netlify/functions/verify-payment?session_id=${sessionId}`);
+      const data = await res.json();
+      if (data.paid) {
+        premium = true;
+        localStorage.setItem("premium", "true");
+      }
+    } catch (e) {
+      // silencieux : si la vérification échoue, l'utilisateur reste sur le mode gratuit
+    } finally {
+      // Nettoie l'adresse pour ne pas garder session_id affiché
+      window.history.replaceState({}, "", window.location.pathname);
+      afficherZoneAction();
     }
   }
 
@@ -208,7 +242,7 @@
     }
   }
 
-  afficherZoneAction();
+  verifierRetourPaiement();
 </script>
 </body>
 </html>
